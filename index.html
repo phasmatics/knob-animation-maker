@@ -3,97 +3,180 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Knob Animation Tool (Prototype)</title>
+  <title>Knob Animation Tool (Edit + Move Tool)</title>
   <style>
-    :root { --panel-bg:#111; --panel-fg:#eee; --muted:#aaa; --accent:#7bd; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; background:#0b0b0b; color:#eee; }
-    .wrap { display:flex; flex-direction:column; min-height:100vh; }
-    .top {
-      flex: 1 1 auto;
+    :root{
+      --bg:#0b0b0b;
+      --panel:#111;
+      --panel2:rgba(0,0,0,.55);
+      --fg:#eee;
+      --muted:#a8a8a8;
+      --accent:#7bd;
+      --danger:#ff7a7a;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;
+      background:var(--bg);
+      color:var(--fg);
+      user-select:none;
+    }
+    .wrap{ display:flex; flex-direction:column; min-height:100vh; }
+    .top{
+      flex:1 1 auto;
       display:flex;
       align-items:center;
       justify-content:center;
-      padding: 16px 12px;
-      background: linear-gradient(#0b0b0b, #101010);
-    }
-    canvas {
-      width: min(1200px, 96vw);
-      height: min(520px, 56vh);
-      background: transparent; /* 透過 */
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 12px;
+      padding:14px 12px;
+      background:linear-gradient(#0b0b0b,#101010);
     }
 
-    .bottom {
-      flex: 0 0 auto;
-      background: var(--panel-bg);
-      border-top: 1px solid rgba(255,255,255,.08);
-      padding: 14px 12px 18px;
+    .stage{
+      position:relative;
+      width:min(1200px,96vw);
+      height:min(820px,76vh);
+    }
+    canvas{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      background:transparent;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+    }
+    .overlay{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
     }
 
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .row + .row { margin-top:10px; }
+    .bottom{
+      flex:0 0 auto;
+      background:var(--panel);
+      border-top:1px solid rgba(255,255,255,.08);
+      padding:12px 12px 14px;
+    }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .row + .row{ margin-top:10px; }
 
-    button {
-      background: #1b1b1b;
-      color: var(--panel-fg);
-      border: 1px solid rgba(255,255,255,.14);
-      padding: 9px 12px;
-      border-radius: 10px;
+    button{
+      background:#1b1b1b;
+      color:var(--fg);
+      border:1px solid rgba(255,255,255,.14);
+      padding:9px 12px;
+      border-radius:10px;
       cursor:pointer;
     }
-    button:hover { border-color: rgba(255,255,255,.28); }
-    button.primary { background: #15222a; border-color: rgba(123,221,255,.35); }
-    button.danger { background: #2a1515; border-color: rgba(255,120,120,.35); }
-    button:disabled { opacity: .45; cursor: not-allowed; }
+    button:hover{ border-color:rgba(255,255,255,.28); }
+    button.primary{ background:#15222a; border-color:rgba(123,221,255,.35); }
+    button.danger{ background:#2a1515; border-color:rgba(255,120,120,.35); }
+    button.active{
+      border-color:rgba(123,221,255,.7);
+      box-shadow:0 0 0 2px rgba(123,221,255,.18) inset;
+    }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
 
-    input, select {
+    input, select{
       background:#141414;
-      color: var(--panel-fg);
-      border: 1px solid rgba(255,255,255,.14);
-      border-radius: 10px;
-      padding: 8px 10px;
+      color:var(--fg);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:10px;
+      padding:8px 10px;
       outline:none;
     }
-    input[type="number"] { width: 92px; }
-    input[type="text"] { width: 220px; }
-    input[type="checkbox"] { width:auto; }
-    .small { width: 96px; }
-    label { color: var(--muted); font-size: 12px; display:flex; flex-direction:column; gap:6px; }
-    .label-inline { flex-direction:row; align-items:center; gap:8px; }
-    .knob-list { margin-top: 12px; display:flex; flex-direction:column; gap:10px; }
-    .knob-card {
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: 12px;
-      padding: 10px;
-      background: rgba(255,255,255,.03);
+    input[type="number"]{ width:94px; }
+    input[type="text"]{ width:220px; }
+    .small{ width:96px; }
+    label{
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
     }
-    .knob-card .header {
-      display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;
+    .label-inline{ flex-direction:row; align-items:center; gap:8px; }
+
+    .hint{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+      user-select:text;
     }
-    .knob-card .title { font-weight: 650; }
-    .hint { color: var(--muted); font-size: 12px; line-height:1.5; }
-    .progress {
-      height: 10px;
-      background: rgba(255,255,255,.08);
-      border-radius: 999px;
+
+    .progress{
+      height:10px;
+      background:rgba(255,255,255,.08);
+      border-radius:999px;
       overflow:hidden;
-      width: 260px;
-      border: 1px solid rgba(255,255,255,.10);
+      width:260px;
+      border:1px solid rgba(255,255,255,.10);
     }
-    .progress > div {
+    .progress>div{
       height:100%;
       width:0%;
-      background: rgba(123,221,255,.65);
-      transition: width .08s linear;
+      background:rgba(123,221,255,.65);
+      transition:width .08s linear;
     }
-    .spacer { flex:1; }
+
+    /* Inline editor */
+    .inline-editor{
+      position:absolute;
+      min-width: 300px;
+      max-width: 380px;
+      padding:10px;
+      border-radius:12px;
+      background:var(--panel2);
+      border:1px solid rgba(255,255,255,.14);
+      backdrop-filter: blur(8px);
+      pointer-events:auto;
+    }
+    .inline-editor .head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+    }
+    .inline-editor .title{
+      font-weight:650;
+      font-size:13px;
+      color:rgba(255,255,255,.92);
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:220px;
+    }
+    .mini-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .badge{
+      font-size:11px;
+      color:rgba(255,255,255,.75);
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+      padding:4px 8px;
+      border-radius:999px;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+    }
+    .grid1{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:8px;
+    }
+    .inline-editor input[type="text"]{ width:100%; }
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <canvas id="c"></canvas>
+    <div class="stage" id="stage">
+      <canvas id="c"></canvas>
+      <div class="overlay" id="overlay"></div>
+    </div>
   </div>
 
   <div class="bottom">
@@ -102,51 +185,54 @@
       <button id="stopBtn">■ 停止</button>
       <button id="resetBtn">↺ リセット</button>
 
-      <div class="spacer"></div>
-
       <label>アニメ秒数
         <input id="durationSec" class="small" type="number" min="0.1" step="0.1" value="3.0">
       </label>
+
+      <button id="addKnobBtn">＋ ノブ追加</button>
+      <button id="delKnobBtn" class="danger">選択ノブ削除</button>
+    </div>
+
+    <div class="row">
       <label>書き出しFPS
         <input id="fps" class="small" type="number" min="1" step="1" value="30">
       </label>
 
-      <!-- CC表示トグル（デフォルトOFF） -->
       <label class="label-inline" title="Canvas下のCC表示をON/OFFします（デフォルトOFF）">
         CC表示
         <input id="showCC" type="checkbox">
       </label>
 
-      <button class="primary" id="exportBtn">⬇ 透過PNG連番を書き出し（ZIP）</button>
-    </div>
+      <label class="label-inline" title="グリッド線を表示します（スナップは常に有効）">
+        グリッド表示
+        <input id="showGrid" type="checkbox">
+      </label>
 
-    <div class="row" style="margin-top:10px;">
-      <button id="addKnobBtn">＋ ノブ追加</button>
+      <label title="グリッド間隔（px）。交点にスナップします。">グリッド(px)
+        <input id="gridSize" class="small" type="number" min="10" step="5" value="40">
+      </label>
+
+      <button class="primary" id="exportBtn">⬇ 透過PNG連番を書き出し（ZIP）</button>
+
       <button id="downloadJsonBtn">設定JSONを保存</button>
       <label>JSONを読み込み
         <input id="loadJsonInput" type="file" accept="application/json">
       </label>
 
-      <div class="spacer"></div>
-
       <div class="progress" title="書き出し進捗">
         <div id="progressBar"></div>
       </div>
-      <div id="progressText" class="hint" style="min-width:160px; text-align:right;"></div>
+      <div id="progressText" class="hint" style="min-width:170px; text-align:right;"></div>
     </div>
 
     <div class="hint" style="margin-top:10px;">
-      ・回転幅は -140°〜+140°（合計280°） / 値域は 0〜127（MIDI CC）<br>
-      ・Canvas背景は透明です（書き出しPNGも透過）。<br>
-      ・CC表示をONにすると、行間（縦方向の余白）を自動的に少し増やし、重なりを防止します。<br>
-      ・のちのち「ノブPNG素材」を使う場合は、描画部分だけ差し替えできます。
+      <b>ショートカット</b>：Space=再生/停止 / R=リセット / Delete=選択ノブ削除 / A=ノブ追加<br>
+      <b>重要</b>：クリックは「選択のみ」。値/位置はドラッグ開始（少し動かした後）で変わります。<br>
+      インラインUIのツール（移動/Start/End）で「ドラッグの意味」を切り替えます。
     </div>
-
-    <div id="knobList" class="knob-list"></div>
   </div>
 </div>
 
-<!-- JSZip（ZIP書き出し用） -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
 <script>
@@ -154,39 +240,67 @@
   // ---------------------------
   // State
   // ---------------------------
+  const TOOL = { MOVE:"move", START:"start", END:"end" };
+  const uid = () => (crypto?.randomUUID?.() ?? ("id_" + Math.random().toString(16).slice(2)));
+
   let state = {
+    tool: TOOL.MOVE,
+    previewProgress: 0,
     durationSec: 3.0,
     fps: 30,
-    showCC: false, // ★ デフォルトでCC表示OFF
+    showCC: false,
+    showGrid: false,
+    gridSize: 40,
+    selectedId: null,
     knobs: [
-      { id: crypto.randomUUID(), label: "TONE", text: "", start: 0, end: 127, mode: "normal" },
-      { id: crypto.randomUUID(), label: "DIST", text: "", start: 0, end: 70,  mode: "normal" },
+      { id: uid(), label:"TONE", text:"", start:0, end:127, size:"L", nx:0.33, ny:0.40, centerDetent:false },
+      { id: uid(), label:"DIST", text:"", start:0, end:70,  size:"L", nx:0.66, ny:0.40, centerDetent:false },
     ],
   };
 
-  // Animation runtime snapshot
+  // Animation
   let playing = false;
   let startTime = 0;
-  let snapshot = null; // { durationMs, knobs:[{start,end,label,text,mode}] }
+  let snapshot = null;
+  let currentPlayProgress = 0;
+
+  // Pointer interaction
+  let pointer = {
+    active:false,
+    pointerId:null,
+    phase:null,          // "pending" | "dragging"
+    knobId:null,
+    downX:0, downY:0,
+    dragOffsetX:0, dragOffsetY:0,
+    toolAtDown: TOOL.MOVE,
+    thresholdPx: 0,
+  };
+
+  // export中などの操作ロック
+  let uiLocked = false;
 
   // ---------------------------
   // DOM
   // ---------------------------
+  const stage = document.getElementById("stage");
   const canvas = document.getElementById("c");
-  const ctx = canvas.getContext("2d", { alpha: true });
+  const ctx = canvas.getContext("2d", { alpha:true });
+  const overlay = document.getElementById("overlay");
 
   const playBtn = document.getElementById("playBtn");
   const stopBtn = document.getElementById("stopBtn");
   const resetBtn = document.getElementById("resetBtn");
-  const exportBtn = document.getElementById("exportBtn");
-  const addKnobBtn = document.getElementById("addKnobBtn");
-  const knobListEl = document.getElementById("knobList");
-
   const durationInput = document.getElementById("durationSec");
+
+  const addKnobBtn = document.getElementById("addKnobBtn");
+  const delKnobBtn = document.getElementById("delKnobBtn");
+
   const fpsInput = document.getElementById("fps");
-
   const showCCCheckbox = document.getElementById("showCC");
+  const showGridCheckbox = document.getElementById("showGrid");
+  const gridSizeInput = document.getElementById("gridSize");
 
+  const exportBtn = document.getElementById("exportBtn");
   const progressBar = document.getElementById("progressBar");
   const progressText = document.getElementById("progressText");
 
@@ -194,558 +308,1070 @@
   const loadJsonInput = document.getElementById("loadJsonInput");
 
   // ---------------------------
-  // Canvas sizing
+  // Inline editor (build once, reuse)
   // ---------------------------
-  function resizeCanvasToCssPixels() {
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const rect = canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.floor(rect.width * dpr));
-    const h = Math.max(1, Math.floor(rect.height * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-    }
-  }
+  const inlineEditor = document.createElement("div");
+  inlineEditor.className = "inline-editor";
+  inlineEditor.style.display = "none";
+  overlay.appendChild(inlineEditor);
+
+  // stop shortcuts when typing inside editor
+  inlineEditor.addEventListener("keydown", (e) => e.stopPropagation(), true);
+
+  const ui = {};
+  (function buildInlineEditor(){
+    inlineEditor.innerHTML = "";
+
+    const head = document.createElement("div");
+    head.className = "head";
+
+    ui.title = document.createElement("div");
+    ui.title.className = "title";
+    ui.title.textContent = "選択ノブ";
+
+    ui.delBtn = document.createElement("button");
+    ui.delBtn.className = "danger";
+    ui.delBtn.textContent = "削除";
+
+    head.appendChild(ui.title);
+    head.appendChild(ui.delBtn);
+    inlineEditor.appendChild(head);
+
+    const toolRow = document.createElement("div");
+    toolRow.className = "mini-row";
+
+    ui.moveBtn = document.createElement("button"); ui.moveBtn.textContent = "移動";
+    ui.startBtn = document.createElement("button"); ui.startBtn.textContent = "Start編集";
+    ui.endBtn  = document.createElement("button"); ui.endBtn.textContent  = "End編集";
+
+    ui.toolBadge = document.createElement("span");
+    ui.toolBadge.className = "badge";
+
+    toolRow.appendChild(ui.moveBtn);
+    toolRow.appendChild(ui.startBtn);
+    toolRow.appendChild(ui.endBtn);
+    toolRow.appendChild(ui.toolBadge);
+    inlineEditor.appendChild(toolRow);
+
+    const sizeRow = document.createElement("div");
+    sizeRow.className = "mini-row";
+
+    const sizeLabel = document.createElement("span");
+    sizeLabel.className = "badge";
+    sizeLabel.textContent = "サイズ";
+
+    ui.sizeL = document.createElement("button"); ui.sizeL.textContent = "L";
+    ui.sizeM = document.createElement("button"); ui.sizeM.textContent = "M";
+    ui.sizeS = document.createElement("button"); ui.sizeS.textContent = "S";
+
+    sizeRow.appendChild(sizeLabel);
+    sizeRow.appendChild(ui.sizeL);
+    sizeRow.appendChild(ui.sizeM);
+    sizeRow.appendChild(ui.sizeS);
+    inlineEditor.appendChild(sizeRow);
+
+    const grid1 = document.createElement("div");
+    grid1.className = "grid1";
+
+    ui.labelInput = document.createElement("input");
+    ui.labelInput.type = "text";
+    ui.labelInput.placeholder = "ラベル（例：TONE）";
+
+    ui.textInput = document.createElement("input");
+    ui.textInput.type = "text";
+    ui.textInput.placeholder = "任意テキスト（小さく表示）";
+
+    grid1.appendChild(ui.labelInput);
+    grid1.appendChild(ui.textInput);
+    inlineEditor.appendChild(grid1);
+
+    const grid2 = document.createElement("div");
+    grid2.className = "grid2";
+
+    const startWrap = document.createElement("label");
+    startWrap.textContent = "Start (0-127)";
+    ui.startNum = document.createElement("input");
+    ui.startNum.type="number"; ui.startNum.min="0"; ui.startNum.max="127"; ui.startNum.step="1";
+    startWrap.appendChild(ui.startNum);
+
+    const endWrap = document.createElement("label");
+    endWrap.textContent = "End (0-127)";
+    ui.endNum = document.createElement("input");
+    ui.endNum.type="number"; ui.endNum.min="0"; ui.endNum.max="127"; ui.endNum.step="1";
+    endWrap.appendChild(ui.endNum);
+
+    grid2.appendChild(startWrap);
+    grid2.appendChild(endWrap);
+    inlineEditor.appendChild(grid2);
+
+    const centerRow = document.createElement("div");
+    centerRow.className = "mini-row";
+
+    const cBadge = document.createElement("span");
+    cBadge.className = "badge";
+    cBadge.textContent = "Pan/EQ向け";
+
+    ui.centerBtn = document.createElement("button");
+    ui.centerBtn.textContent = "センター(64=真上)";
+
+    centerRow.appendChild(cBadge);
+    centerRow.appendChild(ui.centerBtn);
+    inlineEditor.appendChild(centerRow);
+  })();
 
   // ---------------------------
   // Helpers
   // ---------------------------
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
 
-  function easeInOutCubic(t) {
-    t = clamp(t, 0, 1);
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  function easeInOutCubic(t){
+    t = clamp(t,0,1);
+    return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
   }
 
-  // CC(0..127) -> angle degrees within 280deg range.
-  // 0 => -140deg (left), 127 => +140deg (right)
-  function ccToAngleDeg(cc) {
-    const t = clamp(cc, 0, 127) / 127;
-    return lerp(-140, 140, t);
-  }
-
-  // Angle degrees where 0deg is up (12 o'clock).
-  function angleDegToRadForCanvas(degFromUp) {
-    const degFromX = degFromUp - 90; // 0(up) -> -90 (canvas x-axis)
-    return degFromX * Math.PI / 180;
-  }
-
-  function formatFrameName(i, digits=4) {
-    return "frame_" + String(i).padStart(digits, "0") + ".png";
-  }
-
-  function setProgress(p, text="") {
-    const pct = clamp(p, 0, 1) * 100;
-    progressBar.style.width = pct.toFixed(1) + "%";
+  function setProgress(p, text=""){
+    const pct = clamp(p,0,1)*100;
+    progressBar.style.width = pct.toFixed(1)+"%";
     progressText.textContent = text;
   }
 
-  // ---------------------------
-  // Layout & Drawing
-  // ---------------------------
-
-  // ★ CC表示ONのときだけ、縦方向の余白（gapY）を増やして重なりを防止
-  // labelMaxOffset: ノブ中心から「一番下のテキスト行」までの追加オフセット（rは別）
-  function computeLabelMaxOffset() {
-    const hasAnyText = state.knobs.some(k => (k.text || "").trim().length > 0);
-
-    // ラベルは常に+24
-    // 任意テキストがあれば+42
-    // CC表示ONなら+58（CC行が追加されるため）
-    if (state.showCC) return 58;
-    if (hasAnyText) return 42;
-    return 24;
-  }
-
-  function computeLayout(width, height, knobCount, labelMaxOffset) {
-    const pad = 26;
-
-    const knobRadius = Math.max(34, Math.min(64, Math.floor(Math.min(width, height) / 10)));
-    const knobDiameter = knobRadius * 2;
-
-    const gapX = Math.floor(knobRadius * 1.2);
-
-    // 基本のgapY（見栄え）
-    let gapY = Math.floor(knobRadius * 1.35);
-
-    // ★ ラベル/テキスト/CCが次の行のノブと干渉しないように最低gapYを確保
-    // 目安：gapY >= labelMaxOffset (+少しマージン)
-    const margin = 10;
-    gapY = Math.max(gapY, labelMaxOffset + margin);
-
-    const usableW = width - pad * 2;
-    const cellW = knobDiameter + gapX;
-    const cols = Math.max(1, Math.floor((usableW + gapX) / cellW));
-    const rows = Math.max(1, Math.ceil(knobCount / cols));
-
-    const totalW = cols * knobDiameter + (cols - 1) * gapX;
-
-    // ★ 最下段だけ「ノブ下のテキスト分(labelMaxOffset)」が追加で必要
-    const totalH = rows * knobDiameter + (rows - 1) * gapY + labelMaxOffset;
-
-    const startX = pad + Math.max(0, Math.floor((usableW - totalW) / 2));
-    const usableH = height - pad * 2;
-    const startY = pad + Math.max(0, Math.floor((usableH - totalH) / 2));
-
-    return { pad, knobRadius, knobDiameter, gapX, gapY, cols, rows, startX, startY, labelMaxOffset };
-  }
-
-  function drawKnob(ctx, cx, cy, r, angleDegFromUp, label, text, value) {
-    // knob body
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // subtle ring
-    ctx.beginPath();
-    ctx.arc(0, 0, r + 2, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.lineWidth = Math.max(2, r * 0.07);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.94)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.lineWidth = Math.max(1, r * 0.05);
-    ctx.stroke();
-
-    // indicator
-    const rad = angleDegToRadForCanvas(angleDegFromUp);
-    const inner = r * 0.18;
-    const outer = r * 0.88;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(rad) * inner, Math.sin(rad) * inner);
-    ctx.lineTo(Math.cos(rad) * outer, Math.sin(rad) * outer);
-    ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.lineWidth = Math.max(2, r * 0.08);
-    ctx.lineCap = "round";
-    ctx.stroke();
-
-    // center dot
-    ctx.beginPath();
-    ctx.arc(0, 0, Math.max(2, r * 0.08), 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fill();
-
-    ctx.restore();
-
-    // label + optional text + optional CC
-    ctx.save();
-    ctx.textAlign = "center";
-
-    // label
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.font = "600 16px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif";
-    ctx.fillText(label || "", cx, cy + r + 24);
-
-    // optional text
-    let y = cy + r + 42;
-    if (text && text.trim().length) {
-      ctx.fillStyle = "rgba(255,255,255,0.78)";
-      ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif";
-      ctx.fillText(text.trim(), cx, y);
-      y += 16; // 次の行へ
-    } else {
-      // textがない場合でも、CCは固定位置に置く方が見た目が安定するので
-      // CC表示ONなら「58」に揃える
-      y = cy + r + 58;
+  function resizeCanvasToCssPixels(){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width * dpr));
+    const h = Math.max(1, Math.floor(rect.height * dpr));
+    if(canvas.width !== w || canvas.height !== h){
+      canvas.width = w;
+      canvas.height = h;
     }
-
-    // optional CC
-    if (state.showCC) {
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      ctx.font = "11px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif";
-      // textがある場合は y（=58または58近辺）に、ない場合も58に
-      const ccY = (text && text.trim().length) ? (cy + r + 58) : (cy + r + 58);
-      ctx.fillText("CC " + Math.round(value), cx, ccY);
-    }
-
-    ctx.restore();
+    return { w, h, dpr, rect };
   }
 
-  function drawScene(progress01, targetCtx = ctx, targetCanvas = canvas) {
-    const w = targetCanvas.width;
-    const h = targetCanvas.height;
-
-    // transparent background
-    targetCtx.clearRect(0, 0, w, h);
-
-    const labelMaxOffset = computeLabelMaxOffset();
-    const layout = computeLayout(w, h, state.knobs.length, labelMaxOffset);
-    const easeT = easeInOutCubic(progress01);
-
-    // subtle caption
-    targetCtx.save();
-    targetCtx.fillStyle = "rgba(255,255,255,0.20)";
-    targetCtx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif";
-    targetCtx.textAlign = "left";
-    targetCtx.fillText("Knob Animation Preview (transparent)", layout.pad, layout.pad - 8);
-    targetCtx.restore();
-
-    for (let i = 0; i < state.knobs.length; i++) {
-      const k = state.knobs[i];
-      const row = Math.floor(i / layout.cols);
-      const col = i % layout.cols;
-
-      const cx = layout.startX + col * (layout.knobDiameter + layout.gapX) + layout.knobRadius;
-      const cy = layout.startY + row * (layout.knobDiameter + layout.gapY) + layout.knobRadius;
-
-      const s = clamp(Number(k.start) || 0, 0, 127);
-      const e = clamp(Number(k.end) || 0, 0, 127);
-      const v = lerp(s, e, easeT);
-
-      const ang = ccToAngleDeg(v);
-      drawKnob(targetCtx, cx, cy, layout.knobRadius, ang, k.label, k.text, v);
-    }
-  }
-
-  // ---------------------------
-  // UI render
-  // ---------------------------
-  function renderKnobList() {
-    knobListEl.innerHTML = "";
-    state.knobs.forEach((k, idx) => {
-      const card = document.createElement("div");
-      card.className = "knob-card";
-
-      const header = document.createElement("div");
-      header.className = "header";
-
-      const title = document.createElement("div");
-      title.className = "title";
-      title.textContent = `ノブ ${idx + 1}`;
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "danger";
-      delBtn.textContent = "削除";
-      delBtn.onclick = () => {
-        state.knobs = state.knobs.filter(x => x.id !== k.id);
-        renderKnobList();
-        requestDraw();
-      };
-
-      header.appendChild(title);
-      header.appendChild(delBtn);
-
-      const row1 = document.createElement("div");
-      row1.className = "row";
-
-      const labelInput = document.createElement("input");
-      labelInput.type = "text";
-      labelInput.value = k.label || "";
-      labelInput.placeholder = "ラベル（例：TONE）";
-      labelInput.oninput = (e) => { k.label = e.target.value; requestDraw(); };
-
-      const textInput = document.createElement("input");
-      textInput.type = "text";
-      textInput.value = k.text || "";
-      textInput.placeholder = "任意テキスト（小さく表示）";
-      textInput.oninput = (e) => { k.text = e.target.value; requestDraw(); };
-
-      row1.appendChild(wrapLabeled("ラベル", labelInput));
-      row1.appendChild(wrapLabeled("任意テキスト", textInput));
-
-      const row2 = document.createElement("div");
-      row2.className = "row";
-
-      const startInput = document.createElement("input");
-      startInput.type = "number"; startInput.min = "0"; startInput.max = "127"; startInput.step = "1";
-      startInput.value = k.start;
-      startInput.oninput = (e) => { k.start = clamp(Number(e.target.value || 0), 0, 127); requestDraw(); };
-
-      const endInput = document.createElement("input");
-      endInput.type = "number"; endInput.min = "0"; endInput.max = "127"; endInput.step = "1";
-      endInput.value = k.end;
-      endInput.oninput = (e) => { k.end = clamp(Number(e.target.value || 0), 0, 127); requestDraw(); };
-
-      const modeSel = document.createElement("select");
-      modeSel.innerHTML = `
-        <option value="normal">通常（0→127）</option>
-        <option value="center">センター型（64が中心）</option>
-      `;
-      modeSel.value = k.mode || "normal";
-      modeSel.onchange = (e) => { k.mode = e.target.value; requestDraw(); };
-
-      row2.appendChild(wrapLabeled("Start (0-127)", startInput));
-      row2.appendChild(wrapLabeled("End (0-127)", endInput));
-      row2.appendChild(wrapLabeled("タイプ", modeSel));
-
-      const hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = "※このプロトタイプでは、センター型も回転マッピングは同じです（64付近が自然に中央）。必要なら後で“64=真上(12時)”固定などにできます。";
-
-      card.appendChild(header);
-      card.appendChild(row1);
-      card.appendChild(row2);
-      card.appendChild(hint);
-      knobListEl.appendChild(card);
-    });
-  }
-
-  function wrapLabeled(labelText, controlEl) {
-    const lab = document.createElement("label");
-    lab.textContent = labelText;
-    lab.appendChild(controlEl);
-    return lab;
-  }
-
-  // ---------------------------
-  // Animation loop
-  // ---------------------------
-  let drawRequested = false;
-  function requestDraw() {
-    if (drawRequested) return;
-    drawRequested = true;
-    requestAnimationFrame(() => {
-      drawRequested = false;
-      resizeCanvasToCssPixels();
-      if (!playing) drawScene(0);
-    });
-  }
-
-  function play() {
-    if (playing) return;
-
-    snapshot = {
-      durationMs: clamp(Number(state.durationSec) || 3, 0.1, 999) * 1000,
-      knobs: state.knobs.map(k => ({
-        start: clamp(Number(k.start) || 0, 0, 127),
-        end: clamp(Number(k.end) || 0, 0, 127),
-        label: k.label || "",
-        text: k.text || "",
-        mode: k.mode || "normal",
-      }))
+  function clientToCanvasPx(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = canvas.width / rect.width;
+    return {
+      x: (clientX - rect.left) * dpr,
+      y: (clientY - rect.top) * dpr,
+      dpr
     };
-
-    playing = true;
-    startTime = performance.now();
-    loop();
   }
 
-  function stop() {
-    playing = false;
-    snapshot = null;
-  }
-
-  function reset() {
-    stop();
-    requestDraw();
-  }
-
-  function loop() {
-    if (!playing || !snapshot) return;
-
-    resizeCanvasToCssPixels();
-
-    const now = performance.now();
-    const t = (now - startTime) / snapshot.durationMs;
-    const p = clamp(t, 0, 1);
-
-    // draw using snapshot values (deterministic)
-    const saved = state.knobs;
-    state.knobs = state.knobs.map((k, i) => ({
-      ...k,
-      start: snapshot.knobs[i]?.start ?? k.start,
-      end: snapshot.knobs[i]?.end ?? k.end,
-      label: snapshot.knobs[i]?.label ?? k.label,
-      text: snapshot.knobs[i]?.text ?? k.text,
-      mode: snapshot.knobs[i]?.mode ?? k.mode,
-    }));
-    drawScene(p);
-    state.knobs = saved;
-
-    if (p >= 1) {
-      playing = false;
-      snapshot = null;
-      return;
-    }
-    requestAnimationFrame(loop);
-  }
-
-  // ---------------------------
-  // Export: PNG sequence ZIP (transparent)
-  // ---------------------------
-  async function exportPngZip() {
-    if (!window.JSZip) {
-      alert("JSZipが読み込めていません（オフラインの場合など）。CDN接続を確認してください。");
-      return;
-    }
-
-    const durationSec = clamp(Number(state.durationSec) || 3, 0.1, 999);
-    const fps = clamp(Number(state.fps) || 30, 1, 240);
-    const frames = Math.max(2, Math.round(durationSec * fps) + 1); // include last frame
-
-    // Offscreen canvas with same pixel size as preview
-    resizeCanvasToCssPixels();
-    const off = document.createElement("canvas");
-    off.width = canvas.width;
-    off.height = canvas.height;
-    const offCtx = off.getContext("2d", { alpha:true });
-
-    // Freeze snapshot for export
-    const exportSnapshot = {
-      durationSec,
-      fps,
-      showCC: state.showCC,
-      knobs: state.knobs.map(k => ({
-        start: clamp(Number(k.start) || 0, 0, 127),
-        end: clamp(Number(k.end) || 0, 0, 127),
-        label: k.label || "",
-        text: k.text || "",
-        mode: k.mode || "normal",
-      }))
+  function canvasPxToClient(pxX, pxY){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = canvas.width / rect.width;
+    return {
+      x: rect.left + pxX / dpr,
+      y: rect.top  + pxY / dpr,
+      dpr
     };
+  }
 
-    const zip = new JSZip();
-    setUiDisabled(true);
-    setProgress(0, `書き出し準備中... (0/${frames})`);
+  function getSelectedKnob(){
+    return state.knobs.find(k => k.id === state.selectedId) || null;
+  }
 
-    try {
-      for (let i = 0; i < frames; i++) {
-        const p = i / (frames - 1);
+  function baseRadius(w,h){
+    return clamp(Math.floor(Math.min(w,h)/10), 34, 64);
+  }
+  function sizeFactor(size){
+    if(size === "S") return 0.68;
+    if(size === "M") return 0.82;
+    return 1.0;
+  }
+  function knobRadiusPx(knob, w, h){
+    return baseRadius(w,h) * sizeFactor(knob.size || "L");
+  }
 
-        // draw with exportSnapshot values
-        const savedKnobs = state.knobs;
-        const savedShowCC = state.showCC;
-
-        state.showCC = exportSnapshot.showCC;
-        state.knobs = savedKnobs.map((k, idx) => ({
-          ...k,
-          start: exportSnapshot.knobs[idx].start,
-          end: exportSnapshot.knobs[idx].end,
-          label: exportSnapshot.knobs[idx].label,
-          text: exportSnapshot.knobs[idx].text,
-          mode: exportSnapshot.knobs[idx].mode,
-        }));
-
-        drawScene(p, offCtx, off);
-
-        state.knobs = savedKnobs;
-        state.showCC = savedShowCC;
-
-        const blob = await new Promise(resolve => off.toBlob(resolve, "image/png"));
-        zip.file(formatFrameName(i, 4), blob);
-
-        setProgress((i + 1) / frames, `PNG生成中... (${i + 1}/${frames})`);
-        await new Promise(r => setTimeout(r, 0));
+  // Value -> Angle (280°). If centerDetent: CC=64 exactly 0° (12 o'clock).
+  function valueToAngleDeg(knob, cc){
+    cc = clamp(cc, 0, 127);
+    if(knob.centerDetent){
+      if(cc <= 64){
+        const t = cc / 64;
+        return -140 + t * 140;
+      } else {
+        const t = (cc - 64) / 63;
+        return t * 140;
       }
-
-      setProgress(1, "ZIP生成中...");
-      const zipBlob = await zip.generateAsync({ type: "blob" }, (meta) => {
-        setProgress(1, `ZIP生成中... (${meta.percent.toFixed(0)}%)`);
-      });
-
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      downloadBlob(zipBlob, `knob_png_sequence_${stamp}.zip`);
-      setProgress(1, "完了（ZIPをダウンロードしました）");
-    } catch (e) {
-      console.error(e);
-      alert("書き出し中にエラーが発生しました。コンソールを確認してください。");
-      setProgress(0, "エラー");
-    } finally {
-      setUiDisabled(false);
     }
+    const t = cc / 127;
+    return -140 + t * 280;
   }
 
-  function setUiDisabled(disabled) {
-    [playBtn, stopBtn, resetBtn, exportBtn, addKnobBtn, durationInput, fpsInput, showCCCheckbox, downloadJsonBtn, loadJsonInput]
-      .forEach(el => el.disabled = disabled);
-    knobListEl.querySelectorAll("button").forEach(btn => btn.disabled = disabled);
+  function angleDegToRadForCanvas(degFromUp){
+    const degFromX = degFromUp - 90;
+    return degFromX * Math.PI / 180;
   }
 
-  function downloadBlob(blob, filename) {
+  // angle (degFromUp) helper
+  function pointerAngleDegFromUpClamped(cx, cy, px, py){
+    const dx = px - cx;
+    const dy = py - cy;
+    let degFromX = Math.atan2(dy, dx) * 180 / Math.PI;
+    let degFromUp = degFromX + 90;
+    while(degFromUp > 180) degFromUp -= 360;
+    while(degFromUp < -180) degFromUp += 360;
+    return clamp(degFromUp, -140, 140);
+  }
+  function degFromUpToCC(degFromUp){
+    const t = (degFromUp + 140) / 280;
+    return Math.round(t * 127);
+  }
+
+  function formatFrameName(i, digits=4){
+    return "frame_" + String(i).padStart(digits,"0") + ".png";
+  }
+
+  function downloadBlob(blob, filename){
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => {
+    setTimeout(()=>{
       URL.revokeObjectURL(a.href);
       a.remove();
     }, 1000);
   }
 
   // ---------------------------
+  // Knob management
+  // ---------------------------
+  function autoPlaceKnob(index, total){
+    const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
+    const rows = Math.max(1, Math.ceil(total / cols));
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const mx = 0.12, my = 0.14;
+    const nx = mx + (1 - mx*2) * ((col + 0.5) / cols);
+    const ny = my + (1 - my*2) * ((row + 0.5) / rows);
+    return { nx, ny };
+  }
+
+  function addKnob(){
+    const n = state.knobs.length + 1;
+    const pos = autoPlaceKnob(n-1, n);
+    const newKnob = {
+      id: uid(),
+      label: "NEW",
+      text: "",
+      start: 0,
+      end: 127,
+      size: "L",
+      nx: pos.nx,
+      ny: pos.ny,
+      centerDetent: false
+    };
+    state.knobs.push(newKnob);
+    state.selectedId = newKnob.id;
+    requestDraw();
+  }
+
+  function deleteSelectedKnob(){
+    if(!state.selectedId) return;
+    const idx = state.knobs.findIndex(k=>k.id===state.selectedId);
+    if(idx < 0) return;
+    state.knobs.splice(idx, 1);
+    state.selectedId = state.knobs[idx]?.id ?? state.knobs[idx-1]?.id ?? (state.knobs[0]?.id ?? null);
+    requestDraw();
+  }
+
+  // ---------------------------
+  // Grid snapping (always enabled for move)
+  // ---------------------------
+  function snapToGrid(px, dpr){
+    const gs = clamp(Number(state.gridSize)||40, 10, 200) * dpr;
+    return Math.round(px / gs) * gs;
+  }
+
+  function clampKnobCenter(pxX, pxY, r, w, h, dpr){
+    const pad = 18 * dpr;
+    const minX = pad + r;
+    const maxX = w - pad - r;
+    const minY = pad + r;
+    const maxY = h - pad - r;
+    return { x: clamp(pxX, minX, maxX), y: clamp(pxY, minY, maxY) };
+  }
+
+  // ---------------------------
+  // Drawing helpers
+  // ---------------------------
+  function drawGrid(targetCtx, w, h, dpr){
+    const gs = clamp(Number(state.gridSize)||40, 10, 200) * dpr;
+    targetCtx.save();
+    targetCtx.strokeStyle = "rgba(255,255,255,0.06)";
+    targetCtx.lineWidth = 1 * dpr;
+    targetCtx.beginPath();
+    for(let x=0; x<=w; x+=gs){ targetCtx.moveTo(x,0); targetCtx.lineTo(x,h); }
+    for(let y=0; y<=h; y+=gs){ targetCtx.moveTo(0,y); targetCtx.lineTo(w,y); }
+    targetCtx.stroke();
+    targetCtx.restore();
+  }
+
+  function roundRectPath(c, x, y, w, h, r){
+    r = Math.max(0, Math.min(r, Math.min(w,h)/2));
+    c.beginPath();
+    c.moveTo(x+r, y);
+    c.arcTo(x+w, y,   x+w, y+h, r);
+    c.arcTo(x+w, y+h, x,   y+h, r);
+    c.arcTo(x,   y+h, x,   y,   r);
+    c.arcTo(x,   y,   x+w, y,   r);
+    c.closePath();
+  }
+
+  // ★ Start/End編集中だけ出すHUD
+  function drawValueHud(targetCtx, text, cx, cy, r, w, h, dpr){
+    targetCtx.save();
+
+    const padX = 10 * dpr;
+    const padY = 6 * dpr;
+    const fontPx = Math.round(13 * dpr);
+    targetCtx.font = `${fontPx}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
+    targetCtx.textBaseline = "middle";
+    targetCtx.textAlign = "center";
+
+    const metrics = targetCtx.measureText(text);
+    const boxW = metrics.width + padX * 2;
+    const boxH = (fontPx + padY * 2);
+
+    // まず上、はみ出すなら下
+    let x = cx - boxW/2;
+    let y = cy - r - (18*dpr) - boxH;
+
+    if(y < 8*dpr) y = cy + r + (18*dpr);
+
+    // clamp
+    x = clamp(x, 8*dpr, w - 8*dpr - boxW);
+    y = clamp(y, 8*dpr, h - 8*dpr - boxH);
+
+    roundRectPath(targetCtx, x, y, boxW, boxH, 10*dpr);
+    targetCtx.fillStyle = "rgba(0,0,0,0.65)";
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(255,255,255,0.18)";
+    targetCtx.lineWidth = 1 * dpr;
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = "rgba(255,255,255,0.92)";
+    targetCtx.fillText(text, x + boxW/2, y + boxH/2);
+
+    targetCtx.restore();
+  }
+
+  function drawKnob(targetCtx, knob, w, h, opts){
+    const { dpr } = opts;
+    const cx = knob.nx * w;
+    const cy = knob.ny * h;
+    const r  = knobRadiusPx(knob, w, h);
+
+    const v = opts.valueForKnob(knob);
+    const ang = valueToAngleDeg(knob, v);
+    const rad = angleDegToRadForCanvas(ang);
+
+    targetCtx.save();
+    targetCtx.translate(cx, cy);
+
+    const isSelected = (opts.highlightId && knob.id === opts.highlightId);
+    if(isSelected){
+      targetCtx.beginPath();
+      targetCtx.arc(0,0,r+6,0,Math.PI*2);
+      targetCtx.strokeStyle = "rgba(123,221,255,0.55)";
+      targetCtx.lineWidth = 2.5 * dpr;
+      targetCtx.stroke();
+    }
+
+    targetCtx.beginPath();
+    targetCtx.arc(0,0,r+2,0,Math.PI*2);
+    targetCtx.strokeStyle = "rgba(255,255,255,0.12)";
+    targetCtx.lineWidth = Math.max(2*dpr, r*0.07);
+    targetCtx.stroke();
+
+    targetCtx.beginPath();
+    targetCtx.arc(0,0,r,0,Math.PI*2);
+    targetCtx.fillStyle = "rgba(255,255,255,1)";
+    targetCtx.fill();
+    targetCtx.strokeStyle = "rgba(0,0,0,0.35)";
+    targetCtx.lineWidth = Math.max(1*dpr, r*0.05);
+    targetCtx.stroke();
+
+    const inner = r * 0.18;
+    const outer = r * 0.88;
+    targetCtx.beginPath();
+    targetCtx.moveTo(Math.cos(rad)*inner, Math.sin(rad)*inner);
+    targetCtx.lineTo(Math.cos(rad)*outer, Math.sin(rad)*outer);
+    targetCtx.strokeStyle = "rgba(0,0,0,0.75)";
+    targetCtx.lineWidth = Math.max(2*dpr, r*0.08);
+    targetCtx.lineCap = "round";
+    targetCtx.stroke();
+
+    targetCtx.beginPath();
+    targetCtx.arc(0,0,Math.max(2*dpr, r*0.08),0,Math.PI*2);
+    targetCtx.fillStyle = "rgba(0,0,0,0.35)";
+    targetCtx.fill();
+
+    targetCtx.restore();
+
+    // texts
+    targetCtx.save();
+    targetCtx.textAlign = "center";
+
+    targetCtx.fillStyle = "rgba(255,255,255,1)";
+    targetCtx.font = `${Math.round(24*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
+    targetCtx.fillText(knob.label || "", cx, cy + r + 36*dpr);
+
+    if(knob.text && knob.text.trim().length){
+      targetCtx.fillStyle = "rgba(255,255,255,0.78)";
+      targetCtx.font = `${Math.round(12*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
+      targetCtx.fillText(knob.text.trim(), cx, cy + r + 42*dpr);
+    }
+
+    if(opts.showCC){
+      targetCtx.fillStyle = "rgba(255,255,255,0.55)";
+      targetCtx.font = `${Math.round(11*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
+      targetCtx.fillText("CC " + Math.round(v), cx, cy + r + 58*dpr);
+    }
+    targetCtx.restore();
+
+    return { cx, cy, r };
+  }
+
+  function drawScene(progress01, targetCtx=ctx, targetCanvas=canvas, renderMode="ui"){
+    const w = targetCanvas.width;
+    const h = targetCanvas.height;
+    const rect = targetCanvas.getBoundingClientRect();
+    const dpr = w / rect.width;
+
+    targetCtx.clearRect(0,0,w,h);
+
+    if(renderMode==="ui" && state.showGrid){
+      drawGrid(targetCtx, w, h, dpr);
+    }
+
+    const easeT = easeInOutCubic(progress01);
+
+    const valueForKnob = (knob) => {
+      const s = clamp(Number(knob.start)||0, 0, 127);
+      const e = clamp(Number(knob.end)||0,   0, 127);
+      return lerp(s, e, easeT);
+    };
+
+    // draw knobs
+    let selectedGeom = null;
+    for(const k of state.knobs){
+      const geom = drawKnob(targetCtx, k, w, h, {
+        dpr,
+        highlightId: (renderMode==="ui" ? state.selectedId : null),
+        showCC: (renderMode==="ui" ? state.showCC : false),
+        valueForKnob,
+      });
+      if(renderMode==="ui" && state.selectedId && k.id === state.selectedId){
+        selectedGeom = geom;
+      }
+    }
+
+    // ★ HUD: Start/End編集中だけ
+    if(renderMode==="ui" && selectedGeom){
+      const sel = getSelectedKnob();
+      if(sel && (state.tool === TOOL.START || state.tool === TOOL.END)){
+        const v = state.tool === TOOL.START ? clamp(Number(sel.start)||0,0,127) : clamp(Number(sel.end)||0,0,127);
+        const label = state.tool === TOOL.START ? "Start" : "End";
+        drawValueHud(targetCtx, `${label}: ${v}`, selectedGeom.cx, selectedGeom.cy, selectedGeom.r, w, h, dpr);
+      }
+    }
+
+    if(renderMode==="ui"){
+      updateInlineEditorUI();
+    }
+  }
+
+  // ---------------------------
+  // Inline editor update (no rebuild)
+  // ---------------------------
+  let lastSelectedIdForUI = null;
+
+  function setTool(nextTool){
+    state.tool = nextTool;
+    if(nextTool === TOOL.START) state.previewProgress = 0;
+    if(nextTool === TOOL.END)   state.previewProgress = 1;
+    syncInlineEditorVisual();
+    requestDraw();
+  }
+
+  function syncInlineEditorVisual(){
+    ui.moveBtn.classList.toggle("active", state.tool === TOOL.MOVE);
+    ui.startBtn.classList.toggle("active", state.tool === TOOL.START);
+    ui.endBtn.classList.toggle("active",  state.tool === TOOL.END);
+
+    ui.toolBadge.textContent =
+      state.tool === TOOL.MOVE  ? "ドラッグで移動（スナップ）" :
+      state.tool === TOOL.START ? "ドラッグでStart変更" :
+      "ドラッグでEnd変更";
+  }
+
+  function updateInlineEditorUI(){
+    const sel = getSelectedKnob();
+    if(!sel){
+      inlineEditor.style.display = "none";
+      lastSelectedIdForUI = null;
+      return;
+    }
+
+    inlineEditor.style.display = "block";
+
+    // wire events once
+    if(!ui._wired){
+      ui._wired = true;
+
+      ui.delBtn.onclick = () => { if(uiLocked) return; deleteSelectedKnob(); };
+      ui.moveBtn.onclick = () => { if(uiLocked) return; setTool(TOOL.MOVE); };
+      ui.startBtn.onclick = () => { if(uiLocked) return; setTool(TOOL.START); };
+      ui.endBtn.onclick  = () => { if(uiLocked) return; setTool(TOOL.END); };
+
+      ui.sizeL.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="L"; requestDraw(); };
+      ui.sizeM.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="M"; requestDraw(); };
+      ui.sizeS.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="S"; requestDraw(); };
+
+      ui.labelInput.addEventListener("input", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        k.label = e.target.value;
+        requestDraw();
+      });
+      ui.textInput.addEventListener("input", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        k.text = e.target.value;
+        requestDraw();
+      });
+      ui.startNum.addEventListener("input", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        k.start = clamp(Number(e.target.value||0),0,127);
+        requestDraw();
+      });
+      ui.endNum.addEventListener("input", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        k.end = clamp(Number(e.target.value||0),0,127);
+        requestDraw();
+      });
+
+      ui.centerBtn.onclick = () => {
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        k.centerDetent = !k.centerDetent;
+        requestDraw();
+      };
+    }
+
+    ui.title.textContent = sel.label ? `選択：${sel.label}` : "選択ノブ";
+
+    const size = sel.size || "L";
+    ui.sizeL.classList.toggle("active", size==="L");
+    ui.sizeM.classList.toggle("active", size==="M");
+    ui.sizeS.classList.toggle("active", size==="S");
+
+    ui.centerBtn.classList.toggle("active", !!sel.centerDetent);
+
+    syncInlineEditorVisual();
+
+    // selection changed → 値を同期（※ツールは維持）
+    if(lastSelectedIdForUI !== sel.id){
+      lastSelectedIdForUI = sel.id;
+
+      ui.labelInput.value = sel.label || "";
+      ui.textInput.value  = sel.text || "";
+      ui.startNum.value   = clamp(Number(sel.start)||0,0,127);
+      ui.endNum.value     = clamp(Number(sel.end)||0,0,127);
+    } else {
+      if(document.activeElement !== ui.labelInput) ui.labelInput.value = sel.label || "";
+      if(document.activeElement !== ui.textInput)  ui.textInput.value  = sel.text || "";
+      if(document.activeElement !== ui.startNum)   ui.startNum.value   = clamp(Number(sel.start)||0,0,127);
+      if(document.activeElement !== ui.endNum)     ui.endNum.value     = clamp(Number(sel.end)||0,0,127);
+    }
+
+    // positioning
+    const { w, h } = resizeCanvasToCssPixels();
+    const rect = canvas.getBoundingClientRect();
+    const dpr = w / rect.width;
+    const stageRect = stage.getBoundingClientRect();
+    const sw = stageRect.width;
+    const sh = stageRect.height;
+    const margin = 8;
+
+    const r = knobRadiusPx(sel, w, h);
+    const cx = sel.nx * w;
+    const cy = sel.ny * h;
+
+    const hasText = (sel.text || "").trim().length > 0;
+    const lowest = state.showCC ? 58 : (hasText ? 42 : 24);
+    const gap = 24;
+
+    inlineEditor.style.visibility = "hidden";
+    inlineEditor.style.left = "0px";
+    inlineEditor.style.top = "0px";
+    inlineEditor.style.transform = "translate(-50%, 0)";
+    const ew = inlineEditor.offsetWidth;
+    const eh = inlineEditor.offsetHeight;
+
+    const belowTopCanvas = cy + r + (lowest + gap) * dpr;
+    const aboveTopCanvas = cy - r - (eh + 16) * dpr;
+
+    const belowClient = canvasPxToClient(cx, belowTopCanvas);
+    const aboveClient = canvasPxToClient(cx, aboveTopCanvas);
+
+    let xLocal = belowClient.x - stageRect.left;
+    const belowYLocal = belowClient.y - stageRect.top;
+    const aboveYLocal = aboveClient.y - stageRect.top;
+
+    xLocal = clamp(xLocal, margin + ew/2, sw - margin - ew/2);
+
+    let yLocal = belowYLocal;
+    if(belowYLocal + eh + margin > sh){
+      if(aboveYLocal >= margin){
+        yLocal = aboveYLocal;
+      } else {
+        yLocal = clamp(belowYLocal, margin, sh - margin - eh);
+      }
+    } else {
+      yLocal = clamp(belowYLocal, margin, sh - margin - eh);
+    }
+
+    inlineEditor.style.left = xLocal + "px";
+    inlineEditor.style.top  = yLocal + "px";
+    inlineEditor.style.visibility = "visible";
+  }
+
+  // ---------------------------
+  // Hit test & pointer interactions
+  // ---------------------------
+  function hitTestKnob(pxX, pxY){
+    const { w, h } = resizeCanvasToCssPixels();
+    for(let i=state.knobs.length-1; i>=0; i--){
+      const k = state.knobs[i];
+      const cx = k.nx * w;
+      const cy = k.ny * h;
+      const r  = knobRadiusPx(k, w, h);
+      const dx = pxX - cx;
+      const dy = pxY - cy;
+      if(dx*dx + dy*dy <= r*r) return { knob:k, cx, cy, r, w, h };
+    }
+    return null;
+  }
+
+  canvas.addEventListener("pointerdown", (e)=>{
+    if(uiLocked) return;
+
+    const p = clientToCanvasPx(e.clientX, e.clientY);
+    const hit = hitTestKnob(p.x, p.y);
+
+    if(!hit){
+      state.selectedId = null;
+      inlineEditor.style.display = "none";
+      requestDraw();
+      return;
+    }
+
+    // select
+    state.selectedId = hit.knob.id;
+
+    pointer.active = true;
+    pointer.pointerId = e.pointerId;
+    pointer.phase = "pending";
+    pointer.knobId = hit.knob.id;
+    pointer.downX = p.x;
+    pointer.downY = p.y;
+    pointer.toolAtDown = state.tool;
+    pointer.thresholdPx = 3 * p.dpr;
+
+    pointer.dragOffsetX = (hit.cx - p.x);
+    pointer.dragOffsetY = (hit.cy - p.y);
+
+    // ★ Detent ON + Start/End中：クリックした瞬間にセンターへ（指示線即移動）
+    if(hit.knob.centerDetent && (state.tool === TOOL.START || state.tool === TOOL.END)){
+      if(state.tool === TOOL.START){
+        hit.knob.start = 64;
+        state.previewProgress = 0;
+      } else {
+        hit.knob.end = 64;
+        state.previewProgress = 1;
+      }
+    }
+
+    canvas.setPointerCapture(e.pointerId);
+    requestDraw();
+  });
+
+  canvas.addEventListener("pointermove", (e)=>{
+    if(uiLocked){
+      canvas.style.cursor = "default";
+      return;
+    }
+
+    if(!pointer.active){
+      const p = clientToCanvasPx(e.clientX, e.clientY);
+      const hit = hitTestKnob(p.x, p.y);
+      canvas.style.cursor = hit ? "pointer" : "default";
+      return;
+    }
+    if(pointer.pointerId !== e.pointerId) return;
+
+    const sel = getSelectedKnob();
+    if(!sel) return;
+
+    const p = clientToCanvasPx(e.clientX, e.clientY);
+    const { w, h } = resizeCanvasToCssPixels();
+
+    const dx = p.x - pointer.downX;
+    const dy = p.y - pointer.downY;
+    const dist2 = dx*dx + dy*dy;
+
+    if(pointer.phase === "pending"){
+      if(dist2 < pointer.thresholdPx * pointer.thresholdPx){
+        return;
+      }
+      pointer.phase = "dragging";
+      canvas.style.cursor = "grabbing";
+    }
+
+    if(pointer.toolAtDown === TOOL.MOVE){
+      const r = knobRadiusPx(sel, w, h);
+      let newCx = p.x + pointer.dragOffsetX;
+      let newCy = p.y + pointer.dragOffsetY;
+
+      newCx = snapToGrid(newCx, p.dpr);
+      newCy = snapToGrid(newCy, p.dpr);
+
+      const clamped = clampKnobCenter(newCx, newCy, r, w, h, p.dpr);
+      sel.nx = clamped.x / w;
+      sel.ny = clamped.y / h;
+      requestDraw();
+      return;
+    }
+
+    // start/end value drag
+    const cx = sel.nx * w;
+    const cy = sel.ny * h;
+
+    const deg = pointerAngleDegFromUpClamped(cx, cy, p.x, p.y);
+    let cc = degFromUpToCC(deg);
+
+    // detent吸着：真上付近は 64
+    if(sel.centerDetent){
+      const SNAP_DEG = 4;
+      if(Math.abs(deg) <= SNAP_DEG) cc = 64;
+    }
+
+    if(pointer.toolAtDown === TOOL.START){
+      sel.start = cc;
+      state.previewProgress = 0;
+    } else if(pointer.toolAtDown === TOOL.END){
+      sel.end = cc;
+      state.previewProgress = 1;
+    }
+    requestDraw();
+  });
+
+  function endPointer(e){
+    pointer.active = false;
+    pointer.pointerId = null;
+    pointer.phase = null;
+    pointer.knobId = null;
+
+    if(e){
+      const p = clientToCanvasPx(e.clientX, e.clientY);
+      const hit = hitTestKnob(p.x, p.y);
+      canvas.style.cursor = hit ? "pointer" : "default";
+    } else {
+      canvas.style.cursor = "default";
+    }
+  }
+  canvas.addEventListener("pointerup", (e)=>{ if(pointer.pointerId === e.pointerId) endPointer(e); });
+  canvas.addEventListener("pointercancel", (e)=>{ if(pointer.pointerId === e.pointerId) endPointer(e); });
+
+  // ---------------------------
+  // Animation
+  // ---------------------------
+  function play(){
+    if(playing) return;
+
+    snapshot = {
+      durationMs: clamp(Number(state.durationSec)||3, 0.1, 999) * 1000,
+      knobs: state.knobs.map(k=>({
+        id:k.id,
+        label:k.label||"",
+        text:k.text||"",
+        start: clamp(Number(k.start)||0,0,127),
+        end: clamp(Number(k.end)||0,0,127),
+        size:k.size||"L",
+        nx:k.nx, ny:k.ny,
+        centerDetent: !!k.centerDetent
+      }))
+    };
+
+    playing = true;
+    startTime = performance.now();
+    currentPlayProgress = 0;
+    loop();
+  }
+
+  function stop(){
+    if(playing){
+      state.previewProgress = clamp(currentPlayProgress, 0, 1);
+    }
+    playing = false;
+    snapshot = null;
+    requestDraw();
+  }
+
+  function reset(){
+    stop();
+    state.previewProgress = 0;
+    requestDraw();
+  }
+
+  function loop(){
+    if(!playing || !snapshot) return;
+
+    resizeCanvasToCssPixels();
+
+    const now = performance.now();
+    const t = (now - startTime) / snapshot.durationMs;
+    const p = clamp(t, 0, 1);
+    currentPlayProgress = p;
+
+    const saved = state.knobs;
+    state.knobs = state.knobs.map(k=>{
+      const s = snapshot.knobs.find(x=>x.id===k.id);
+      return s ? { ...k, ...s } : k;
+    });
+
+    drawScene(p, ctx, canvas, "ui");
+
+    state.knobs = saved;
+
+    if(p >= 1){
+      playing = false;
+      snapshot = null;
+      state.previewProgress = 1;
+      requestDraw();
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------------------------
+  // Export: PNG sequence ZIP
+  // ---------------------------
+  async function exportPngZip(){
+    if(!window.JSZip){
+      alert("JSZipが読み込めていません（オフラインの場合など）。CDN接続を確認してください。");
+      return;
+    }
+
+    const durationSec = clamp(Number(state.durationSec)||3, 0.1, 999);
+    const fps = clamp(Number(state.fps)||30, 1, 240);
+    const frames = Math.max(2, Math.round(durationSec * fps) + 1);
+
+    const { w, h } = resizeCanvasToCssPixels();
+    const off = document.createElement("canvas");
+    off.width = w;
+    off.height = h;
+    const offCtx = off.getContext("2d", { alpha:true });
+
+    const exportSnapshot = {
+      showCC: state.showCC,
+      knobs: state.knobs.map(k=>({
+        id:k.id, label:k.label||"", text:k.text||"",
+        start: clamp(Number(k.start)||0,0,127),
+        end: clamp(Number(k.end)||0,0,127),
+        size:k.size||"L", nx:k.nx, ny:k.ny,
+        centerDetent: !!k.centerDetent
+      }))
+    };
+
+    const zip = new JSZip();
+    setUiDisabled(true);
+    setProgress(0, `PNG生成中... (0/${frames})`);
+
+    try{
+      for(let i=0;i<frames;i++){
+        const p = i/(frames-1);
+
+        const savedKnobs = state.knobs;
+        const savedShowCC = state.showCC;
+        const savedShowGrid = state.showGrid;
+        const savedSelected = state.selectedId;
+
+        state.showCC = exportSnapshot.showCC;
+        state.showGrid = false;
+        state.selectedId = null;
+
+        state.knobs = savedKnobs.map(k=>{
+          const s = exportSnapshot.knobs.find(x=>x.id===k.id);
+          return s ? { ...k, ...s } : k;
+        });
+
+        drawScene(p, offCtx, off, "export");
+
+        state.knobs = savedKnobs;
+        state.showCC = savedShowCC;
+        state.showGrid = savedShowGrid;
+        state.selectedId = savedSelected;
+
+        const blob = await new Promise(res => off.toBlob(res, "image/png"));
+        zip.file(formatFrameName(i,4), blob);
+
+        setProgress((i+1)/frames, `PNG生成中... (${i+1}/${frames})`);
+        await new Promise(r=>setTimeout(r,0));
+      }
+
+      setProgress(1, "ZIP生成中...");
+      const zipBlob = await zip.generateAsync({ type:"blob" }, (meta)=>{
+        setProgress(1, `ZIP生成中... (${meta.percent.toFixed(0)}%)`);
+      });
+
+      const stamp = new Date().toISOString().replace(/[:.]/g,"-");
+      downloadBlob(zipBlob, `knob_png_sequence_${stamp}.zip`);
+      setProgress(1, "完了（ZIPをダウンロードしました）");
+    }catch(e){
+      console.error(e);
+      alert("書き出し中にエラーが発生しました。コンソールを確認してください。");
+      setProgress(0,"エラー");
+    }finally{
+      setUiDisabled(false);
+    }
+  }
+
+  function setUiDisabled(disabled){
+    uiLocked = !!disabled;
+
+    [
+      playBtn, stopBtn, resetBtn,
+      durationInput,
+      addKnobBtn, delKnobBtn,
+      fpsInput, showCCCheckbox, showGridCheckbox, gridSizeInput,
+      exportBtn, downloadJsonBtn, loadJsonInput
+    ].forEach(el=>el.disabled = disabled);
+
+    inlineEditor.style.pointerEvents = disabled ? "none" : "auto";
+    inlineEditor.style.opacity = disabled ? "0.55" : "1";
+  }
+
+  // ---------------------------
   // Save/Load JSON
   // ---------------------------
-  function downloadJson() {
+  function downloadJson(){
     const data = {
-      version: 1,
+      version: 7,
+      tool: state.tool,
+      previewProgress: state.previewProgress,
       durationSec: state.durationSec,
       fps: state.fps,
       showCC: state.showCC,
+      showGrid: state.showGrid,
+      gridSize: state.gridSize,
       knobs: state.knobs,
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const blob = new Blob([JSON.stringify(data,null,2)], { type:"application/json" });
+    const stamp = new Date().toISOString().replace(/[:.]/g,"-");
     downloadBlob(blob, `knob_settings_${stamp}.json`);
   }
 
-  async function loadJsonFile(file) {
+  async function loadJsonFile(file){
     const text = await file.text();
     const data = JSON.parse(text);
-    if (!data || !Array.isArray(data.knobs)) throw new Error("Invalid JSON");
+    if(!data || !Array.isArray(data.knobs)) throw new Error("Invalid JSON");
 
     state.durationSec = Number(data.durationSec ?? 3);
     state.fps = Number(data.fps ?? 30);
     state.showCC = !!data.showCC;
+    state.showGrid = !!data.showGrid;
+    state.gridSize = Number(data.gridSize ?? 40);
+    state.previewProgress = clamp(Number(data.previewProgress ?? 0), 0, 1);
+    state.tool = (data.tool===TOOL.START||data.tool===TOOL.END||data.tool===TOOL.MOVE) ? data.tool : TOOL.MOVE;
 
-    state.knobs = data.knobs.map(k => ({
-      id: k.id || crypto.randomUUID(),
+    state.knobs = data.knobs.map(k=>({
+      id: k.id || uid(),
       label: String(k.label ?? ""),
       text: String(k.text ?? ""),
       start: clamp(Number(k.start ?? 0), 0, 127),
-      end: clamp(Number(k.end ?? 0), 0, 127),
-      mode: (k.mode === "center" ? "center" : "normal"),
+      end: clamp(Number(k.end ?? 127), 0, 127),
+      size: (k.size==="S"||k.size==="M"||k.size==="L") ? k.size : "L",
+      nx: clamp(Number(k.nx ?? 0.5), 0.02, 0.98),
+      ny: clamp(Number(k.ny ?? 0.5), 0.02, 0.98),
+      centerDetent: !!k.centerDetent
     }));
+
+    state.selectedId = state.knobs[0]?.id ?? null;
 
     durationInput.value = state.durationSec;
     fpsInput.value = state.fps;
     showCCCheckbox.checked = state.showCC;
+    showGridCheckbox.checked = state.showGrid;
+    gridSizeInput.value = state.gridSize;
 
-    renderKnobList();
     requestDraw();
   }
 
   // ---------------------------
-  // Events
+  // UI events
   // ---------------------------
-  playBtn.onclick = () => play();
-  stopBtn.onclick = () => stop();
-  resetBtn.onclick = () => reset();
+  playBtn.onclick = ()=>play();
+  stopBtn.onclick = ()=>stop();
+  resetBtn.onclick = ()=>reset();
 
-  addKnobBtn.onclick = () => {
-    state.knobs.push({ id: crypto.randomUUID(), label: "NEW", text:"", start: 0, end: 127, mode: "normal" });
-    renderKnobList();
-    requestDraw();
-  };
+  addKnobBtn.onclick = ()=>addKnob();
+  delKnobBtn.onclick = ()=>deleteSelectedKnob();
 
-  durationInput.oninput = (e) => {
-    state.durationSec = clamp(Number(e.target.value || 3), 0.1, 999);
-  };
-  fpsInput.oninput = (e) => {
-    state.fps = clamp(Number(e.target.value || 30), 1, 240);
-  };
+  durationInput.oninput = (e)=>{ state.durationSec = clamp(Number(e.target.value||3),0.1,999); };
+  fpsInput.oninput = (e)=>{ state.fps = clamp(Number(e.target.value||30),1,240); };
+  showCCCheckbox.onchange = (e)=>{ state.showCC = !!e.target.checked; requestDraw(); };
+  showGridCheckbox.onchange = (e)=>{ state.showGrid = !!e.target.checked; requestDraw(); };
+  gridSizeInput.oninput = (e)=>{ state.gridSize = clamp(Number(e.target.value||40),10,200); requestDraw(); };
 
-  showCCCheckbox.onchange = (e) => {
-    state.showCC = !!e.target.checked;
-    requestDraw(); // ★ CCのON/OFFでレイアウトも変わるので再描画
-  };
-
-  exportBtn.onclick = () => exportPngZip();
-
-  downloadJsonBtn.onclick = () => downloadJson();
-  loadJsonInput.onchange = async (e) => {
+  exportBtn.onclick = ()=>exportPngZip();
+  downloadJsonBtn.onclick = ()=>downloadJson();
+  loadJsonInput.onchange = async (e)=>{
     const file = e.target.files?.[0];
-    if (!file) return;
-    try { await loadJsonFile(file); }
-    catch (err) { alert("JSON読み込みに失敗しました: " + err.message); }
-    finally { e.target.value = ""; }
+    if(!file) return;
+    try{ await loadJsonFile(file); }
+    catch(err){ alert("JSON読み込みに失敗しました: " + err.message); }
+    finally{ e.target.value = ""; }
   };
 
-  window.addEventListener("resize", () => requestDraw());
+  // Keyboard shortcuts
+  window.addEventListener("keydown", (e)=>{
+    if(uiLocked) return;
+
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    const isTyping = (tag === "input" || tag === "textarea");
+    if(isTyping) return;
+
+    if(e.key === " "){
+      if(playing) stop(); else play();
+      e.preventDefault();
+    }
+    if(e.key === "r" || e.key === "R") reset();
+    if(e.key === "Delete" || e.key === "Backspace") deleteSelectedKnob();
+    if(e.key === "a" || e.key === "A") addKnob();
+  });
+
+  // ---------------------------
+  // Render loop (non-playing redraw)
+  // ---------------------------
+  let drawRequested = false;
+  function requestDraw(){
+    if(drawRequested) return;
+    drawRequested = true;
+    requestAnimationFrame(()=>{
+      drawRequested = false;
+      resizeCanvasToCssPixels();
+      if(!playing) drawScene(state.previewProgress, ctx, canvas, "ui");
+    });
+  }
+  window.addEventListener("resize", ()=>requestDraw());
 
   // ---------------------------
   // Init
@@ -753,10 +1379,12 @@
   durationInput.value = state.durationSec;
   fpsInput.value = state.fps;
   showCCCheckbox.checked = state.showCC;
+  showGridCheckbox.checked = state.showGrid;
+  gridSizeInput.value = state.gridSize;
 
-  renderKnobList();
+  state.selectedId = state.knobs[0]?.id ?? null;
+  setProgress(0,"");
   requestDraw();
-  setProgress(0, "");
 })();
 </script>
 </body>
