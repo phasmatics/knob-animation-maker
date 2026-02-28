@@ -29,7 +29,6 @@
       align-items:center;
       justify-content:center;
       padding:14px 12px;
-      background:linear-gradient(#0b0b0b,#101010);
     }
 
     .stage{
@@ -44,7 +43,7 @@
       height:100%;
       background:transparent;
       border:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
+      border-radius:4px;
     }
     .overlay{
       position:absolute;
@@ -66,7 +65,7 @@
       color:var(--fg);
       border:1px solid rgba(255,255,255,.14);
       padding:9px 12px;
-      border-radius:10px;
+      border-radius:4px;
       cursor:pointer;
     }
     button:hover{ border-color:rgba(255,255,255,.28); }
@@ -82,7 +81,7 @@
       background:#141414;
       color:var(--fg);
       border:1px solid rgba(255,255,255,.14);
-      border-radius:10px;
+      border-radius:4px;
       padding:8px 10px;
       outline:none;
     }
@@ -125,8 +124,8 @@
       position:absolute;
       min-width: 300px;
       max-width: 380px;
-      padding:10px;
-      border-radius:12px;
+      padding:12px 14px;
+      border-radius:4px;
       background:var(--panel2);
       border:1px solid rgba(255,255,255,.14);
       backdrop-filter: blur(8px);
@@ -137,7 +136,16 @@
       align-items:center;
       justify-content:space-between;
       gap:10px;
-      margin-bottom:8px;
+      margin-bottom:10px;
+    }
+    .inline-editor .mini-row{
+      margin-top:10px;
+    }
+    .inline-editor .mini-row:first-of-type{ margin-top:0; }
+    .inline-editor .grid1,
+    .inline-editor .grid2,
+    .inline-editor .color-row{
+      margin-top:12px;
     }
     .inline-editor .title{
       font-weight:650;
@@ -152,10 +160,9 @@
     .badge{
       font-size:11px;
       color:rgba(255,255,255,.75);
-      background:rgba(255,255,255,.10);
-      border:1px solid rgba(255,255,255,.12);
-      padding:4px 8px;
-      border-radius:999px;
+      background:rgba(255,255,255,0);
+      padding:4px 4px;
+      border-radius:2px;
     }
     .grid2{
       display:grid;
@@ -168,6 +175,18 @@
       gap:8px;
     }
     .inline-editor input[type="text"]{ width:100%; }
+    .color-swatch{
+      width:28px;
+      height:28px;
+      border-radius:4px;
+      border:2px solid rgba(255,255,255,.3);
+      cursor:pointer;
+      flex-shrink:0;
+    }
+    .color-swatch:hover{ border-color:rgba(255,255,255,.5); }
+    .color-swatch.active{ border-color:rgba(123,221,255,.7); box-shadow:0 0 0 2px rgba(123,221,255,.18) inset; }
+    .color-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .color-row input[type="text"]{ width:88px; font-family:monospace; }
   </style>
 </head>
 <body>
@@ -226,7 +245,7 @@
     </div>
 
     <div class="hint" style="margin-top:10px;">
-      <b>ショートカット</b>：Space=再生/停止 / R=リセット / Delete=選択ノブ削除 / A=ノブ追加<br>
+      <b>ショートカット</b>：Space=再生/停止 / R=リセット / Delete=選択ノブ削除 / A=ノブ追加 / Alt+ドラッグ=複製 / Ctrl+Z=元に戻す / Ctrl+Y=やり直し<br>
       <b>重要</b>：クリックは「選択のみ」。値/位置はドラッグ開始（少し動かした後）で変わります。<br>
       インラインUIのツール（移動/Start/End）で「ドラッグの意味」を切り替えます。
     </div>
@@ -253,8 +272,8 @@
     gridSize: 40,
     selectedId: null,
     knobs: [
-      { id: uid(), label:"TONE", text:"", start:0, end:127, size:"L", nx:0.33, ny:0.40, centerDetent:false },
-      { id: uid(), label:"DIST", text:"", start:0, end:70,  size:"L", nx:0.66, ny:0.40, centerDetent:false },
+      { id: uid(), label:"TONE", labelColor:"#ffffff", labelBold:false, start:0, end:127, size:"L", nx:0.33, ny:0.40, centerDetent:false },
+      { id: uid(), label:"DIST", labelColor:"#ffffff", labelBold:false, start:0, end:70,  size:"L", nx:0.66, ny:0.40, centerDetent:false },
     ],
   };
 
@@ -274,10 +293,59 @@
     dragOffsetX:0, dragOffsetY:0,
     toolAtDown: TOOL.MOVE,
     thresholdPx: 0,
+    altAtDown: false,    // Alt/Option + ドラッグで複製
   };
 
   // export中などの操作ロック
   let uiLocked = false;
+
+  // Undo/Redo
+  const MAX_UNDO = 50;
+  let undoStack = [];
+  let redoStack = [];
+
+  function captureState(){
+    return {
+      knobs: state.knobs.map(k=>({ ...k })),
+      selectedId: state.selectedId,
+      tool: state.tool,
+      previewProgress: state.previewProgress
+    };
+  }
+  function restoreState(s){
+    state.knobs = s.knobs.map(k=>({ ...k }));
+    state.selectedId = s.selectedId;
+    state.tool = s.tool;
+    state.previewProgress = s.previewProgress;
+  }
+  function saveUndo(){
+    if(uiLocked) return;
+    redoStack = [];
+    const snap = captureState();
+    undoStack.push(snap);
+    if(undoStack.length > MAX_UNDO) undoStack.shift();
+  }
+  function undo(){
+    if(uiLocked || undoStack.length === 0) return;
+    redoStack.push(captureState());
+    restoreState(undoStack.pop());
+    syncInputsFromState();
+    requestDraw();
+  }
+  function redo(){
+    if(uiLocked || redoStack.length === 0) return;
+    undoStack.push(captureState());
+    restoreState(redoStack.pop());
+    syncInputsFromState();
+    requestDraw();
+  }
+  function syncInputsFromState(){
+    durationInput.value = state.durationSec;
+    fpsInput.value = state.fps;
+    showCCCheckbox.checked = state.showCC;
+    showGridCheckbox.checked = state.showGrid;
+    gridSizeInput.value = state.gridSize;
+  }
 
   // ---------------------------
   // DOM
@@ -333,8 +401,18 @@
     ui.delBtn.className = "danger";
     ui.delBtn.textContent = "削除";
 
+    ui.dupBtn = document.createElement("button");
+    ui.dupBtn.textContent = "複製";
+    ui.dupBtn.title = "Alt+ドラッグでも複製可能";
+
+    const headBtns = document.createElement("div");
+    headBtns.style.display = "flex";
+    headBtns.style.gap = "8px";
+    headBtns.appendChild(ui.delBtn);
+    headBtns.appendChild(ui.dupBtn);
+
     head.appendChild(ui.title);
-    head.appendChild(ui.delBtn);
+    head.appendChild(headBtns);
     inlineEditor.appendChild(head);
 
     const toolRow = document.createElement("div");
@@ -377,13 +455,47 @@
     ui.labelInput.type = "text";
     ui.labelInput.placeholder = "ラベル（例：TONE）";
 
-    ui.textInput = document.createElement("input");
-    ui.textInput.type = "text";
-    ui.textInput.placeholder = "任意テキスト（小さく表示）";
-
     grid1.appendChild(ui.labelInput);
-    grid1.appendChild(ui.textInput);
     inlineEditor.appendChild(grid1);
+
+    const colorRow = document.createElement("div");
+    colorRow.className = "color-row";
+
+    const colorLabel = document.createElement("span");
+    colorLabel.className = "badge";
+    colorLabel.textContent = "ラベル色";
+
+    ui.swatchWhite = document.createElement("button");
+    ui.swatchWhite.type = "button";
+    ui.swatchWhite.className = "color-swatch";
+    ui.swatchWhite.style.background = "#ffffff";
+    ui.swatchWhite.title = "白";
+
+    ui.swatchBlack = document.createElement("button");
+    ui.swatchBlack.type = "button";
+    ui.swatchBlack.className = "color-swatch";
+    ui.swatchBlack.style.background = "#000000";
+    ui.swatchBlack.title = "黒";
+
+    ui.labelColorInput = document.createElement("input");
+    ui.labelColorInput.type = "text";
+    ui.labelColorInput.placeholder = "#ffffff";
+    ui.labelColorInput.maxLength = 7;
+
+    const boldLabel = document.createElement("label");
+    boldLabel.className = "label-inline";
+    boldLabel.title = "ラベルを太字にする";
+    boldLabel.textContent = "Bold";
+    ui.labelBoldCheck = document.createElement("input");
+    ui.labelBoldCheck.type = "checkbox";
+    boldLabel.appendChild(ui.labelBoldCheck);
+
+    colorRow.appendChild(colorLabel);
+    colorRow.appendChild(ui.swatchWhite);
+    colorRow.appendChild(ui.swatchBlack);
+    colorRow.appendChild(ui.labelColorInput);
+    colorRow.appendChild(boldLabel);
+    inlineEditor.appendChild(colorRow);
 
     const grid2 = document.createElement("div");
     grid2.className = "grid2";
@@ -424,6 +536,13 @@
   // ---------------------------
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
   const lerp = (a,b,t)=>a+(b-a)*t;
+
+  function parseHexColor(s){
+    if(!s || typeof s !== "string") return null;
+    const m = s.trim().match(/^#([0-9a-fA-F]{6})$/);
+    if(!m) return null;
+    return "#" + m[1].toLowerCase();
+  }
 
   function easeInOutCubic(t){
     t = clamp(t,0,1);
@@ -551,12 +670,14 @@
   }
 
   function addKnob(){
+    saveUndo();
     const n = state.knobs.length + 1;
     const pos = autoPlaceKnob(n-1, n);
     const newKnob = {
       id: uid(),
       label: "NEW",
-      text: "",
+      labelColor: "#ffffff",
+      labelBold: false,
       start: 0,
       end: 127,
       size: "L",
@@ -571,10 +692,33 @@
 
   function deleteSelectedKnob(){
     if(!state.selectedId) return;
+    saveUndo();
     const idx = state.knobs.findIndex(k=>k.id===state.selectedId);
     if(idx < 0) return;
     state.knobs.splice(idx, 1);
     state.selectedId = state.knobs[idx]?.id ?? state.knobs[idx-1]?.id ?? (state.knobs[0]?.id ?? null);
+    requestDraw();
+  }
+
+  function duplicateSelectedKnob(offsetNx = 0.06, offsetNy = 0.06){
+    const sel = getSelectedKnob();
+    if(!sel) return;
+    saveUndo();
+    const copy = {
+      id: uid(),
+      label: sel.label || "",
+      labelColor: sel.labelColor || "#ffffff",
+      labelBold: !!sel.labelBold,
+      start: clamp(Number(sel.start)||0, 0, 127),
+      end: clamp(Number(sel.end)||0, 0, 127),
+      size: sel.size || "L",
+      nx: clamp(sel.nx + offsetNx, 0.02, 0.98),
+      ny: clamp(sel.ny + offsetNy, 0.02, 0.98),
+      centerDetent: !!sel.centerDetent
+    };
+    const idx = state.knobs.findIndex(k=>k.id===state.selectedId);
+    state.knobs.splice(idx + 1, 0, copy);
+    state.selectedId = copy.id;
     requestDraw();
   }
 
@@ -712,19 +856,14 @@
 
     targetCtx.restore();
 
-    // texts
+    // label text
     targetCtx.save();
     targetCtx.textAlign = "center";
-
-    targetCtx.fillStyle = "rgba(255,255,255,1)";
-    targetCtx.font = `${Math.round(24*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
+    const labelColor = parseHexColor(knob.labelColor) || "#ffffff";
+    targetCtx.fillStyle = labelColor;
+    const fontWeight = knob.labelBold ? "bold" : "normal";
+    targetCtx.font = `${fontWeight} ${Math.round(24*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
     targetCtx.fillText(knob.label || "", cx, cy + r + 36*dpr);
-
-    if(knob.text && knob.text.trim().length){
-      targetCtx.fillStyle = "rgba(255,255,255,0.78)";
-      targetCtx.font = `${Math.round(12*dpr)}px system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans JP', sans-serif`;
-      targetCtx.fillText(knob.text.trim(), cx, cy + r + 42*dpr);
-    }
 
     if(opts.showCC){
       targetCtx.fillStyle = "rgba(255,255,255,0.55)";
@@ -798,13 +937,19 @@
     requestDraw();
   }
 
+  function syncLabelColorSwatches(knob){
+    const c = (knob?.labelColor || "#ffffff").toLowerCase();
+    ui.swatchWhite.classList.toggle("active", c === "#ffffff");
+    ui.swatchBlack.classList.toggle("active", c === "#000000");
+  }
+
   function syncInlineEditorVisual(){
     ui.moveBtn.classList.toggle("active", state.tool === TOOL.MOVE);
     ui.startBtn.classList.toggle("active", state.tool === TOOL.START);
     ui.endBtn.classList.toggle("active",  state.tool === TOOL.END);
 
     ui.toolBadge.textContent =
-      state.tool === TOOL.MOVE  ? "ドラッグで移動（スナップ）" :
+      state.tool === TOOL.MOVE  ? "ドラッグで移動" :
       state.tool === TOOL.START ? "ドラッグでStart変更" :
       "ドラッグでEnd変更";
   }
@@ -824,35 +969,70 @@
       ui._wired = true;
 
       ui.delBtn.onclick = () => { if(uiLocked) return; deleteSelectedKnob(); };
+      ui.dupBtn.onclick = () => { if(uiLocked) return; duplicateSelectedKnob(); };
       ui.moveBtn.onclick = () => { if(uiLocked) return; setTool(TOOL.MOVE); };
       ui.startBtn.onclick = () => { if(uiLocked) return; setTool(TOOL.START); };
       ui.endBtn.onclick  = () => { if(uiLocked) return; setTool(TOOL.END); };
 
-      ui.sizeL.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="L"; requestDraw(); };
-      ui.sizeM.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="M"; requestDraw(); };
-      ui.sizeS.onclick = () => { if(uiLocked) return; const k=getSelectedKnob(); if(!k) return; k.size="S"; requestDraw(); };
+      ui.sizeL.onclick = () => { if(uiLocked) return; saveUndo(); const k=getSelectedKnob(); if(!k) return; k.size="L"; requestDraw(); };
+      ui.sizeM.onclick = () => { if(uiLocked) return; saveUndo(); const k=getSelectedKnob(); if(!k) return; k.size="M"; requestDraw(); };
+      ui.sizeS.onclick = () => { if(uiLocked) return; saveUndo(); const k=getSelectedKnob(); if(!k) return; k.size="S"; requestDraw(); };
 
       ui.labelInput.addEventListener("input", (e)=>{
         if(uiLocked) return;
         const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
         k.label = e.target.value;
         requestDraw();
       });
-      ui.textInput.addEventListener("input", (e)=>{
+      ui.swatchWhite.onclick = ()=>{
         if(uiLocked) return;
         const k=getSelectedKnob(); if(!k) return;
-        k.text = e.target.value;
+        saveUndo();
+        k.labelColor = "#ffffff";
+        ui.labelColorInput.value = "#ffffff";
+        syncLabelColorSwatches(k);
+        requestDraw();
+      };
+      ui.swatchBlack.onclick = ()=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
+        k.labelColor = "#000000";
+        ui.labelColorInput.value = "#000000";
+        syncLabelColorSwatches(k);
+        requestDraw();
+      };
+      ui.labelColorInput.addEventListener("input", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        const parsed = parseHexColor(e.target.value);
+        if(parsed){
+          saveUndo();
+          k.labelColor = parsed;
+          e.target.value = parsed;
+        }
+        syncLabelColorSwatches(k);
+        requestDraw();
+      });
+      ui.labelBoldCheck.addEventListener("change", (e)=>{
+        if(uiLocked) return;
+        const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
+        k.labelBold = !!e.target.checked;
         requestDraw();
       });
       ui.startNum.addEventListener("input", (e)=>{
         if(uiLocked) return;
         const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
         k.start = clamp(Number(e.target.value||0),0,127);
         requestDraw();
       });
       ui.endNum.addEventListener("input", (e)=>{
         if(uiLocked) return;
         const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
         k.end = clamp(Number(e.target.value||0),0,127);
         requestDraw();
       });
@@ -860,7 +1040,11 @@
       ui.centerBtn.onclick = () => {
         if(uiLocked) return;
         const k=getSelectedKnob(); if(!k) return;
+        saveUndo();
         k.centerDetent = !k.centerDetent;
+        k.start = 64;
+        k.end = 64;
+        state.previewProgress = 0;
         requestDraw();
       };
     }
@@ -873,6 +1057,7 @@
     ui.sizeS.classList.toggle("active", size==="S");
 
     ui.centerBtn.classList.toggle("active", !!sel.centerDetent);
+    syncLabelColorSwatches(sel);
 
     syncInlineEditorVisual();
 
@@ -881,12 +1066,14 @@
       lastSelectedIdForUI = sel.id;
 
       ui.labelInput.value = sel.label || "";
-      ui.textInput.value  = sel.text || "";
+      ui.labelColorInput.value = parseHexColor(sel.labelColor) || "#ffffff";
+      ui.labelBoldCheck.checked = !!sel.labelBold;
       ui.startNum.value   = clamp(Number(sel.start)||0,0,127);
       ui.endNum.value     = clamp(Number(sel.end)||0,0,127);
     } else {
       if(document.activeElement !== ui.labelInput) ui.labelInput.value = sel.label || "";
-      if(document.activeElement !== ui.textInput)  ui.textInput.value  = sel.text || "";
+      if(document.activeElement !== ui.labelColorInput) ui.labelColorInput.value = parseHexColor(sel.labelColor) || "#ffffff";
+      if(document.activeElement !== ui.labelBoldCheck) ui.labelBoldCheck.checked = !!sel.labelBold;
       if(document.activeElement !== ui.startNum)   ui.startNum.value   = clamp(Number(sel.start)||0,0,127);
       if(document.activeElement !== ui.endNum)     ui.endNum.value     = clamp(Number(sel.end)||0,0,127);
     }
@@ -904,8 +1091,7 @@
     const cx = sel.nx * w;
     const cy = sel.ny * h;
 
-    const hasText = (sel.text || "").trim().length > 0;
-    const lowest = state.showCC ? 58 : (hasText ? 42 : 24);
+    const lowest = state.showCC ? 58 : 24;
     const gap = 24;
 
     inlineEditor.style.visibility = "hidden";
@@ -984,6 +1170,7 @@
     pointer.downY = p.y;
     pointer.toolAtDown = state.tool;
     pointer.thresholdPx = 3 * p.dpr;
+    pointer.altAtDown = !!e.altKey;
 
     pointer.dragOffsetX = (hit.cx - p.x);
     pointer.dragOffsetY = (hit.cy - p.y);
@@ -1033,6 +1220,21 @@
       }
       pointer.phase = "dragging";
       canvas.style.cursor = "grabbing";
+      if(!pointer.altAtDown) saveUndo();
+
+      // Alt+ドラッグ：複製してから移動
+      if(pointer.altAtDown && pointer.toolAtDown === TOOL.MOVE){
+        duplicateSelectedKnob(0, 0);
+        const newSel = getSelectedKnob();
+        if(newSel){
+          pointer.knobId = newSel.id;
+          const newCx = newSel.nx * w;
+          const newCy = newSel.ny * h;
+          pointer.dragOffsetX = newCx - p.x;
+          pointer.dragOffsetY = newCy - p.y;
+        }
+        pointer.altAtDown = false;
+      }
     }
 
     if(pointer.toolAtDown === TOOL.MOVE){
@@ -1101,7 +1303,8 @@
       knobs: state.knobs.map(k=>({
         id:k.id,
         label:k.label||"",
-        text:k.text||"",
+        labelColor: parseHexColor(k.labelColor) || "#ffffff",
+        labelBold: !!k.labelBold,
         start: clamp(Number(k.start)||0,0,127),
         end: clamp(Number(k.end)||0,0,127),
         size:k.size||"L",
@@ -1183,7 +1386,8 @@
     const exportSnapshot = {
       showCC: state.showCC,
       knobs: state.knobs.map(k=>({
-        id:k.id, label:k.label||"", text:k.text||"",
+        id:k.id, label:k.label||"", labelColor: parseHexColor(k.labelColor) || "#ffffff",
+        labelBold: !!k.labelBold,
         start: clamp(Number(k.start)||0,0,127),
         end: clamp(Number(k.end)||0,0,127),
         size:k.size||"L", nx:k.nx, ny:k.ny,
@@ -1284,6 +1488,7 @@
     const data = JSON.parse(text);
     if(!data || !Array.isArray(data.knobs)) throw new Error("Invalid JSON");
 
+    saveUndo();
     state.durationSec = Number(data.durationSec ?? 3);
     state.fps = Number(data.fps ?? 30);
     state.showCC = !!data.showCC;
@@ -1295,7 +1500,8 @@
     state.knobs = data.knobs.map(k=>({
       id: k.id || uid(),
       label: String(k.label ?? ""),
-      text: String(k.text ?? ""),
+      labelColor: parseHexColor(k.labelColor) || "#ffffff",
+      labelBold: !!k.labelBold,
       start: clamp(Number(k.start ?? 0), 0, 127),
       end: clamp(Number(k.end ?? 127), 0, 127),
       size: (k.size==="S"||k.size==="M"||k.size==="L") ? k.size : "L",
@@ -1347,6 +1553,20 @@
 
     const tag = document.activeElement?.tagName?.toLowerCase();
     const isTyping = (tag === "input" || tag === "textarea");
+    const mod = e.ctrlKey || e.metaKey;
+
+    if(mod && e.key === "z"){
+      if(e.shiftKey) redo();
+      else undo();
+      e.preventDefault();
+      return;
+    }
+    if(mod && e.key === "y"){
+      redo();
+      e.preventDefault();
+      return;
+    }
+
     if(isTyping) return;
 
     if(e.key === " "){
